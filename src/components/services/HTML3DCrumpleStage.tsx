@@ -376,8 +376,8 @@ export default function HTML3DCrumpleStage({
       ref={stageViewportRef}
       className="relative w-full h-full flex items-center justify-center select-none"
       style={{
-        perspective: isDesktop ? "1600px" : "1200px",
-        perspectiveOrigin: isDesktop ? "60% 50%" : "50% 48%",
+        perspective: "1600px",
+        perspectiveOrigin: "60% 50%",
       }}
     >
       {services.map((service, idx) => {
@@ -392,7 +392,7 @@ export default function HTML3DCrumpleStage({
             className="absolute w-full max-w-[880px] flex items-center justify-center inset-0 m-auto h-fit"
             style={{
               willChange: "transform, opacity",
-              transformOrigin: isDesktop ? "65% 50%" : "50% 50%",
+              transformOrigin: "65% 50%",
               backfaceVisibility: "hidden",
               zIndex: idx === 0 ? 50 : 40 - idx * 10,
               opacity: idx === 0 ? 1 : 0,

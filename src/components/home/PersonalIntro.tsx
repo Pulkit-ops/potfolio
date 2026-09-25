@@ -122,12 +122,14 @@ export default function PersonalIntro() {
     document.addEventListener("visibilitychange", onVisibility);
     onScroll();
 
+    const cleanupCards = mobileCardRefs.current.slice();
+
     return () => {
       if (frame) cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
       document.removeEventListener("visibilitychange", onVisibility);
-      mobileCardRefs.current.forEach((el) => {
+      cleanupCards.forEach((el) => {
         if (el) {
           el.style.filter = "";
           el.style.opacity = "";
@@ -193,9 +195,6 @@ export default function PersonalIntro() {
     };
   }, [scrollProgress, totalChapters]);
 
-  // Dynamic data-driven track height: chapters.length * 100dvh
-  // Use dvh (dynamic viewport height) for iOS Safari address bar awareness
-  const trackHeight = `${totalChapters * 100}dvh`;
 
   return (
     <section
@@ -396,7 +395,7 @@ export default function PersonalIntro() {
                         CHAPTER {chapter.chapterNum}
                       </span>
                       <span className="font-mono text-[10px] text-neutral-500 uppercase tracking-wider">
-                        // {chapter.id.replace(/-/g, " ")}
+                        {/* {chapter.id.replace(/-/g, " ")} */}
                       </span>
                     </div>
                     <span className="font-mono text-xs font-medium text-neutral-400">

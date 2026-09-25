@@ -70,7 +70,7 @@ export default function ServicesIndex({
 
       {/* Services Nav List */}
       <nav className="space-y-2">
-        {services.map((service, idx) => {
+        {services.map((service) => {
           const isActive = service.id === activeId;
           return (
             <button

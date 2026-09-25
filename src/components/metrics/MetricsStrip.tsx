@@ -19,7 +19,7 @@ export default function MetricsStrip() {
     label: metric.label,
     index: `0${idx + 1} // 04`,
     tag: statTags[idx] || "VERIFIED IMPACT",
-    image: metric.image || "/assets/case-lifestyle.webp",
+    image: metric.image || "/assets/camera-sunset.jpg",
     marqueeText: metric.marqueeText,
     link: metric.link || "#proven-results",
     marqueeBgColor: "#e51d24",

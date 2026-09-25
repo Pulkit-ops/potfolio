@@ -4,16 +4,13 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { servicesDetailedData } from "@/data/servicesData";
 import ServicesIndex from "./ServicesIndex";
 import HTML3DCrumpleStage from "./HTML3DCrumpleStage";
+import ServicesMobileMethods from "./ServicesMobileMethods";
 
 export default function ServicesStack() {
   const [activeId, setActiveId] = useState(servicesDetailedData[0].id);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.innerWidth >= 1024;
-    }
-    return true;
-  });
+  // Default to true on initial render (both SSR and client) so the DOM tree matches identically
+  const [isDesktop, setIsDesktop] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stageWrapperRef = useRef<HTMLDivElement>(null);
@@ -36,19 +33,17 @@ export default function ServicesStack() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Stable callback for card-change notifications from the animation engine.
-  // Must NOT be an inline arrow — that would create a new ref every render,
-  // cascading through useCallback/useEffect deps and resetting the RAF loop.
+  // Stable callback for card-change notifications from the desktop animation engine.
   const handleCardChange = useCallback(
     (idx: number) => {
-      if (!isProgrammaticScroll.current) {
+      if (!isProgrammaticScroll.current && servicesDetailedData[idx]) {
         setActiveId(servicesDetailedData[idx].id);
       }
     },
-    [] // isProgrammaticScroll is a ref, servicesDetailedData is module-level constant
+    []
   );
 
-  // Jump to specific service card smoothly
+  // Jump to specific service card smoothly (desktop)
   const handleSelectService = useCallback(
     (id: string) => {
       const idx = servicesDetailedData.findIndex((s) => s.id === id);
@@ -63,11 +58,7 @@ export default function ServicesStack() {
       const rect = container.getBoundingClientRect();
       const stageHeight = stage.offsetHeight;
       const scrollDistance = container.offsetHeight - stageHeight;
-      const stickyTop = isDesktop
-        ? window.innerWidth >= 1280
-          ? 96
-          : 80
-        : 56;
+      const stickyTop = window.innerWidth >= 1280 ? 96 : 80;
 
       const targetScrollProgress = idx / (servicesDetailedData.length - 1);
       const targetY =
@@ -82,91 +73,60 @@ export default function ServicesStack() {
         isProgrammaticScroll.current = false;
       }, 700);
     },
-    [isDesktop, prefersReducedMotion]
+    [prefersReducedMotion]
   );
 
-  const activeIndex = servicesDetailedData.findIndex((s) => s.id === activeId);
-
   return (
-    <div
-      ref={containerRef}
-      className={`w-full relative ${
-        isDesktop ? "h-[400vh]" : "h-[340vh]"
-      }`}
-    >
-      {/* Sticky Presentation Stage */}
-      <div
-        ref={stageWrapperRef}
-        className={`sticky ${
-          isDesktop
-            ? "top-20 xl:top-24 h-[84vh] min-h-[640px] max-h-[860px]"
-            : "top-14 sm:top-16 h-[82dvh] min-h-[560px] max-h-[760px]"
-        } w-full flex flex-col justify-start`}
-      >
-        {/* ============================================================== */}
-        {/* MOBILE STICKY TRACKER (<lg)                                    */}
-        {/* ============================================================== */}
-        <div className="block lg:hidden w-full mb-3 flex-shrink-0">
-          <div className="bg-[#0b0d13]/90 backdrop-blur-xl border border-white/10 rounded-full px-4 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between shadow-xl shadow-black/80">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono text-xs font-bold text-[#e51d24] flex-shrink-0">
-                {servicesDetailedData[activeIndex >= 0 ? activeIndex : 0].number}
-              </span>
-              <span className="font-mono text-xs uppercase font-medium text-white truncate max-w-[140px] xs:max-w-[200px] sm:max-w-none">
-                {servicesDetailedData[activeIndex >= 0 ? activeIndex : 0].indexLabel}
-              </span>
-            </div>
+    <div className="w-full">
+      {/* ============================================================== */}
+      {/* DESKTOP EXPERIENCE (lg+): STICKY 3D ORIGAMI CRUMPLE STAGE      */}
+      {/* ============================================================== */}
+      <div className="hidden lg:block w-full">
+        <div
+          ref={containerRef}
+          className="w-full relative h-[400vh]"
+        >
+          <div
+            ref={stageWrapperRef}
+            className="sticky top-20 xl:top-24 h-[84vh] min-h-[640px] max-h-[860px] w-full flex flex-col justify-start"
+          >
+            <div className="flex flex-row items-start gap-8 xl:gap-14 w-full flex-1 min-h-0 relative">
+              {/* Left Column: Persistent Index (Desktop Only) */}
+              <div className="w-[30%] xl:w-[26%] flex-shrink-0 pt-2">
+                <ServicesIndex
+                  services={servicesDetailedData}
+                  activeId={activeId}
+                  onSelect={handleSelectService}
+                />
+              </div>
 
-            {/* Quick Tap Dots */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              {servicesDetailedData.map((s, idx) => {
-                const isSelected = s.id === activeId;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => handleSelectService(s.id)}
-                    aria-label={`Jump to ${s.title}`}
-                    className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-[10px] transition-all ${
-                      isSelected
-                        ? "bg-[#e51d24] text-white font-bold scale-110"
-                        : "bg-white/10 text-neutral-400 hover:bg-white/20"
-                    }`}
-                    type="button"
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
+              {/* Right Column: 100% Native HTML 3D Crumple & Origami Toss Stage */}
+              <div className="w-[70%] xl:w-[74%] h-full relative flex items-center justify-center">
+                <HTML3DCrumpleStage
+                  services={servicesDetailedData}
+                  containerRef={containerRef}
+                  stageWrapperRef={stageWrapperRef}
+                  isDesktop={isDesktop}
+                  prefersReducedMotion={prefersReducedMotion}
+                  activeId={activeId}
+                  onCardChange={handleCardChange}
+                />
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* ============================================================== */}
-        {/* MAIN LAYOUT: PERSISTENT INDEX (LEFT) + CRUMPLE STAGE (RIGHT)  */}
-        {/* ============================================================== */}
-        <div className="flex flex-col lg:flex-row items-center lg:items-start gap-8 xl:gap-14 w-full flex-1 min-h-0 relative">
-          {/* Left Column: Persistent Index (Desktop Only) */}
-          <div className="hidden lg:block lg:w-[30%] xl:w-[26%] flex-shrink-0 pt-2">
-            <ServicesIndex
-              services={servicesDetailedData}
-              activeId={activeId}
-              onSelect={handleSelectService}
-            />
-          </div>
-
-          {/* Right Column: 100% Native HTML 3D Crumple & Origami Toss Stage */}
-          <div className="w-full lg:w-[70%] xl:w-[74%] h-full relative flex items-center justify-center">
-            <HTML3DCrumpleStage
-              services={servicesDetailedData}
-              containerRef={containerRef}
-              stageWrapperRef={stageWrapperRef}
-              isDesktop={isDesktop}
-              prefersReducedMotion={prefersReducedMotion}
-              activeId={activeId}
-              onCardChange={handleCardChange}
-            />
-          </div>
-        </div>
+      {/* ============================================================== */}
+      {/* MOBILE EXPERIENCE (<lg): KACHMO METHODS MOBILE STAGE ENGINE   */}
+      {/* Zero scroll-hijack, hardware-composited morph & gesture rail   */}
+      {/* ============================================================== */}
+      <div className="block lg:hidden w-full">
+        <ServicesMobileMethods
+          services={servicesDetailedData}
+          activeId={activeId}
+          onSelect={setActiveId}
+        />
       </div>
     </div>
   );

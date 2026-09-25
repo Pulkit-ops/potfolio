@@ -6,8 +6,6 @@ import { contactDetails } from "@/data/portfolioData";
 import {
   X,
   Mail,
-  Phone,
-  MessageSquare,
   Copy,
   Check,
   ExternalLink,
@@ -179,7 +177,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
             id="contact-modal-title"
             className="font-display text-3xl sm:text-4xl lg:text-6xl uppercase tracking-wide leading-[0.92] text-white"
           >
-            LET'S START A <br />
+            LET&apos;S START A <br />
             <span className="text-[#e51d24]">CONVERSATION.</span>
           </h2>
           <p className="mt-4 text-neutral-300 text-sm sm:text-base font-normal leading-relaxed max-w-xl">
@@ -396,10 +394,11 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
           <form onSubmit={handleSendEmail} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-mono text-neutral-400 mb-1">
+                <label htmlFor="quick-name" className="block text-xs font-mono text-neutral-400 mb-1">
                   YOUR NAME / BRAND
                 </label>
                 <input
+                  id="quick-name"
                   type="text"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
@@ -409,10 +408,11 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-neutral-400 mb-1">
+                <label htmlFor="quick-interest" className="block text-xs font-mono text-neutral-400 mb-1">
                   PROJECT INTEREST
                 </label>
                 <select
+                  id="quick-interest"
                   value={clientInterest}
                   onChange={(e) => setClientInterest(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#111319] border border-white/10 text-white text-xs sm:text-sm focus:outline-none focus:border-[#e51d24] transition-colors"
@@ -427,10 +427,11 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
             </div>
 
             <div>
-              <label className="block text-xs font-mono text-neutral-400 mb-1">
+              <label htmlFor="quick-message" className="block text-xs font-mono text-neutral-400 mb-1">
                 MESSAGE / GOALS
               </label>
               <textarea
+                id="quick-message"
                 value={clientMessage}
                 onChange={(e) => setClientMessage(e.target.value)}
                 rows={3}

@@ -11,20 +11,20 @@ export interface MetricItem {
 export const metricsData: MetricItem[] = [
   {
     id: "impressions",
-    value: "85M",
+    value: "2.5M",
     accent: "+",
     label: "Organic Video Impressions",
-    image: "/assets/case-lifestyle.webp",
-    marqueeText: "85M+ ORGANIC VIDEO IMPRESSIONS • VIRAL SPRINT • 100% ORGANIC",
+    image: "/assets/camera-sunset.jpg",
+    marqueeText: "2.5M+ ORGANIC VIDEO IMPRESSIONS • VIRAL SPRINT • 100% ORGANIC",
     link: "#proven-results",
   },
   {
     id: "followers",
-    value: "14M",
-    accent: "+",
+    value: "87K",
+    accent: "",
     label: "Followers Cultivated Across Feeds",
-    image: "/assets/hero-subject.webp",
-    marqueeText: "14M+ FOLLOWERS CULTIVATED ACROSS FEEDS • AUDIENCE ECOSYSTEM",
+    image: "/assets/about/pulkit-portrait.jpeg",
+    marqueeText: "87K FOLLOWERS CULTIVATED ACROSS FEEDS • AUDIENCE ECOSYSTEM",
     link: "#proven-results",
   },
   {
@@ -32,41 +32,37 @@ export const metricsData: MetricItem[] = [
     value: "4.8",
     accent: "X",
     label: "Average Campaign ROAS / Value",
-    image: "/assets/case-audio.webp",
+    image: "/assets/case-marketing-billboard.jpg",
     marqueeText: "4.8X AVERAGE CAMPAIGN ROAS / VALUE • CONVERSION FUNNELS",
     link: "#capabilities",
   },
   {
     id: "series",
-    value: "50",
+    value: "5",
     accent: "+",
     label: "High-Performing Viral Series",
-    image: "/assets/case-beverage.webp",
-    marqueeText: "50+ HIGH-PERFORMING VIRAL SERIES • THUMB-STOPPING HOOKS",
+    image: "/assets/case-crisis-phone.jpg",
+    marqueeText: "5+ HIGH-PERFORMING VIRAL SERIES • THUMB-STOPPING HOOKS",
     link: "#proven-results",
   },
 ];
 
 export const provenResultsGallery = [
   {
-    image: "/assets/case-lifestyle.webp",
-    text: "Vanguard • 38.2M Views",
+    image: "/assets/case-vyom-interiors.webp",
+    text: "Vyom Interiors • 610K Views",
   },
   {
-    image: "/assets/case-audio.webp",
-    text: "Aura Acoustics • 8.4M Reach",
+    image: "/assets/case-bucket-list-adventure.webp",
+    text: "Bucket List Adventure • 140K Views",
   },
   {
-    image: "/assets/case-beverage.webp",
-    text: "Zing Energy • 120M+ Views",
+    image: "/assets/case-ayrak-care.webp",
+    text: "Ayrak Care • 4.4K Views",
   },
   {
-    image: "/assets/case-techwear.jpg",
-    text: "Aether Techwear • 480K Sprint",
-  },
-  {
-    image: "/assets/case-chronograph.jpg",
-    text: "Kinetik Chrono • 4.8X ROAS",
+    image: "/assets/case-avitech-automation.webp",
+    text: "Avitech Automation • 1.4K Views",
   },
 ];
 

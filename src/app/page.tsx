@@ -88,7 +88,7 @@ export default function Home() {
             <span className="block mt-1 sm:mt-2 text-white">ACTUALLY DO.</span>
           </h2>
           <p className="mt-6 text-neutral-300 text-sm sm:text-base lg:text-lg max-w-2xl font-normal leading-relaxed">
-            Good content isn't just something you post to feed an algorithm. It's
+            Good content isn&apos;t just something you post to feed an algorithm. It&apos;s
             something people genuinely stop their thumb for, remember, and talk
             about. Here is how we build it together.
           </p>
@@ -112,7 +112,7 @@ export default function Home() {
           />
 
           <h2 className="font-display text-[2rem] sm:text-5xl lg:text-7xl uppercase tracking-wide leading-[1.05] sm:leading-[0.94] text-white max-w-3xl mb-6 relative z-10">
-            <span className="block">THINK WE'D MAKE</span>
+            <span className="block">THINK WE&apos;D MAKE</span>
             <span className="block mt-1.5 sm:mt-2 text-[#e51d24]">GOOD WORK TOGETHER?</span>
           </h2>
 

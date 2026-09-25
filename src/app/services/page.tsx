@@ -43,7 +43,7 @@ export default function ServicesPage() {
           </h1>
 
           <p className="mt-8 text-lg sm:text-xl text-neutral-300 font-normal leading-relaxed max-w-2xl">
-            Good content isn't just something you post to feed an algorithm. It's
+            Good content isn&apos;t just something you post to feed an algorithm. It&apos;s
             something people genuinely stop their thumb for, remember, and talk
             about. Here is how we build it together.
           </p>
@@ -67,7 +67,7 @@ export default function ServicesPage() {
           />
 
           <h2 className="font-display text-[2rem] sm:text-5xl lg:text-7xl uppercase tracking-wide leading-[1.05] sm:leading-[0.94] text-white max-w-3xl mb-6 relative z-10">
-            <span className="block">THINK WE'D MAKE</span>
+            <span className="block">THINK WE&apos;D MAKE</span>
             <span className="block mt-1.5 sm:mt-2 text-[#e51d24]">GOOD WORK TOGETHER?</span>
           </h2>
 

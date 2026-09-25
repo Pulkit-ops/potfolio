@@ -5,9 +5,9 @@ import { Camera, Mesh, Plane, Program, Renderer, Texture, Transform } from "ogl"
 
 type GL = Renderer["gl"];
 
-function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
+function debounce<T extends (...args: unknown[]) => void>(func: T, wait: number) {
   let timeout: number;
-  return function (this: any, ...args: Parameters<T>) {
+  return function (this: unknown, ...args: Parameters<T>) {
     window.clearTimeout(timeout);
     timeout = window.setTimeout(() => func.apply(this, args), wait);
   };
@@ -17,11 +17,15 @@ function lerp(p1: number, p2: number, t: number): number {
   return p1 + (p2 - p1) * t;
 }
 
-function autoBind(instance: any): void {
+function autoBind(instance: object): void {
   const proto = Object.getPrototypeOf(instance);
+  if (!proto) return;
   Object.getOwnPropertyNames(proto).forEach((key) => {
-    if (key !== "constructor" && typeof instance[key] === "function") {
-      instance[key] = instance[key].bind(instance);
+    if (key !== "constructor") {
+      const desc = Object.getOwnPropertyDescriptor(proto, key);
+      if (desc && typeof desc.value === "function") {
+        (instance as Record<string, unknown>)[key] = desc.value.bind(instance);
+      }
     }
   });
 }
@@ -468,7 +472,7 @@ class App {
     last: number;
     position?: number;
   };
-  onCheckDebounce: (...args: any[]) => void;
+  onCheckDebounce: (...args: unknown[]) => void;
   renderer!: Renderer;
   gl!: GL;
   camera!: Camera;
@@ -567,10 +571,10 @@ class App {
     font: string
   ) {
     const defaultItems: CircularGalleryItem[] = [
-      { image: "/assets/case-lifestyle.webp", text: "Vanguard Streetwear" },
-      { image: "/assets/case-audio.webp", text: "Aura Acoustics" },
-      { image: "/assets/case-beverage.webp", text: "Zing Energy Drink" },
-      { image: "/assets/hero-subject.webp", text: "Personal Brand Sprint" },
+      { image: "/assets/case-vyom-interiors.webp", text: "Vyom Interiors • 610K Views" },
+      { image: "/assets/case-bucket-list-adventure.webp", text: "Bucket List Adventure • 140K Views" },
+      { image: "/assets/case-ayrak-care.webp", text: "Ayrak Care • 4.4K Views" },
+      { image: "/assets/case-avitech-automation.webp", text: "Avitech Automation • 1.4K Views" },
     ];
     const galleryItems = items && items.length ? items : defaultItems;
     // Duplicate items to support infinite wrapping
@@ -618,11 +622,12 @@ class App {
 
   onWheel(e: Event) {
     if (!this.isVisible) return;
-    const wheelEvent = e as WheelEvent;
+    const wheelEvent = e as WheelEvent & { wheelDelta?: number; detail?: number };
     const delta =
       wheelEvent.deltaY ||
-      (wheelEvent as any).wheelDelta ||
-      (wheelEvent as any).detail;
+      wheelEvent.wheelDelta ||
+      wheelEvent.detail ||
+      0;
     this.scroll.target +=
       (delta > 0 ? this.scrollSpeed : -this.scrollSpeed) * 0.22;
     this.onCheckDebounce();

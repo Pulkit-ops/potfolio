@@ -565,8 +565,8 @@ const RippleDistortion = ({
 
     const onMove = (event: PointerEvent) => {
       if (!isVisible) return;
-      const coalesced = typeof (event as any).getCoalescedEvents === 'function' 
-        ? (event as any).getCoalescedEvents() 
+      const coalesced = typeof (event as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] }).getCoalescedEvents === 'function' 
+        ? (event as PointerEvent & { getCoalescedEvents: () => PointerEvent[] }).getCoalescedEvents() 
         : null;
 
       if (coalesced && coalesced.length > 0) {

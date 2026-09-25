@@ -6,15 +6,13 @@ import { ServiceDetailedItem } from "@/data/servicesData";
 interface ServiceCardEditorialProps {
   service: ServiceDetailedItem;
   isActive: boolean;
-  index: number;
-  total: number;
+  index?: number;
+  total?: number;
 }
 
 export default function ServiceCardEditorial({
   service,
   isActive,
-  index,
-  total,
 }: ServiceCardEditorialProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [spotlightPos, setSpotlightPos] = useState({ x: 0, y: 0 });
@@ -125,14 +123,6 @@ export default function ServiceCardEditorial({
           {/* Multi-stop film vignette */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#08090b]/90 via-[#08090b]/10 to-transparent pointer-events-none" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#08090b]/30 via-transparent to-transparent pointer-events-none" />
-          <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[10px] font-mono text-neutral-400 pointer-events-none">
-            <span className="bg-black/80 px-2 py-0.5 rounded-full border border-white/[0.08] backdrop-blur-md">
-              PULKIT // {service.title}
-            </span>
-            <span className="bg-[#e51d24]/20 px-2 py-0.5 rounded-full border border-[#e51d24]/30 backdrop-blur-md text-[#ff5459]">
-              {service.number}
-            </span>
-          </div>
         </div>
 
         {/* Description & Inline Accent Quote */}
@@ -231,14 +221,6 @@ export default function ServiceCardEditorial({
             <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-[#06070a]/40 pointer-events-none" />
             {/* Subtle inner border glow on hover */}
             <div className="absolute inset-0 rounded-2xl ring-inset ring-1 ring-white/0 group-hover:ring-white/[0.06] transition-all duration-500 pointer-events-none" />
-            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-[11px] font-mono text-neutral-400 pointer-events-none">
-              <span className="bg-black/75 px-2.5 py-1 rounded-full border border-white/[0.08] backdrop-blur-md">
-                PULKIT // {service.title}
-              </span>
-              <span className="bg-[#e51d24]/20 px-2.5 py-1 rounded-full border border-[#e51d24]/30 backdrop-blur-md text-[#ff5459] font-bold">
-                {service.number}
-              </span>
-            </div>
           </div>
         </div>
       </div>

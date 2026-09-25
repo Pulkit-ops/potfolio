@@ -200,7 +200,6 @@ const MenuItem: React.FC<MenuItemProps> = ({
   defaultMarqueeText,
   borderColor,
   isFirst,
-  isLast,
   isActive = false,
   isMobile = false,
   scrollDirection = "bottom",
@@ -271,6 +270,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
         animationRef.current.kill();
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayText, image, repetitions, speed]);
 
   const openCard = (edge: "top" | "bottom" = "bottom") => {
