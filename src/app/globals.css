@@ -49,12 +49,19 @@
 }
 
 html {
-  scroll-behavior: smooth;
   background-color: var(--color-bg-base);
   color: var(--color-text-main);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+}
+
+/* Smooth anchor scrolling only when motion is welcome. Next.js disables it
+   during route transitions via <html data-scroll-behavior="smooth">. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -84,33 +91,38 @@ body {
   background: var(--color-red-primary);
 }
 
-/* Ambient Background Lights */
+/* Ambient Background Lights
+   Previously filter: blur(140px) on fixed layers. The soft falloff now comes
+   from the gradient itself (wider box, longer stops): same look, zero filter
+   cost, and nothing to re-rasterise on Safari when the viewport resizes. */
 .ambient-glow {
   position: fixed;
   pointer-events: none;
   z-index: 0;
   border-radius: 50%;
-  filter: blur(140px);
-  opacity: 0.18;
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 .glow-top {
-  top: -100px;
-  right: -50px;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, var(--color-red-primary), transparent 70%);
+  top: -380px;
+  right: -330px;
+  width: 1060px;
+  height: 1060px;
+  opacity: 0.18;
+  background: radial-gradient(circle closest-side, rgba(229, 29, 36, 0.62) 0%, rgba(229, 29, 36, 0.3) 32%, rgba(229, 29, 36, 0.08) 62%, transparent 100%);
 }
 
 .glow-bottom {
-  bottom: 10%;
-  left: -100px;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, var(--color-gold-accent), transparent 70%);
+  bottom: calc(10% - 280px);
+  left: -380px;
+  width: 1160px;
+  height: 1160px;
   opacity: 0.1;
+  background: radial-gradient(circle closest-side, rgba(229, 169, 83, 0.62) 0%, rgba(229, 169, 83, 0.3) 32%, rgba(229, 169, 83, 0.08) 62%, transparent 100%);
+}
+
+/* Soft red bloom (replaces blur-3xl blobs in CTA / modal). */
+.bloom-red {
+  background: radial-gradient(circle closest-side, rgba(229, 29, 36, 0.14) 0%, rgba(229, 29, 36, 0.06) 45%, transparent 100%);
 }
 
 /* Text Highlights & Gradients */
@@ -130,11 +142,11 @@ body {
 .hero {
   position: relative;
   width: 100%;
-  /* dvh accounts for mobile browser toolbar appearing/disappearing */
-  height: 100dvh;
-  /* Fallback for browsers without dvh support */
+  /* svh, not dvh: dvh changes while iOS/Android toolbars collapse during
+     scroll, which resized the hero (and the WebGL canvas) mid-scroll and
+     shifted everything below it. svh is fixed for the page's lifetime. */
   height: 100vh;
-  height: 100dvh;
+  height: 100svh;
   min-height: 560px;
   max-height: 1080px;
   background-color: #08090b;
@@ -142,7 +154,6 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  perspective: 1000px;
 }
 
 /* Taller min-height on larger screens with adequate vertical space */
@@ -155,7 +166,8 @@ body {
 /* On landscape mobile or short screens, avoid forcing excess vertical stretching */
 @media (max-height: 540px) {
   .hero {
-    min-height: 100dvh;
+    min-height: 100vh;
+    min-height: 100svh;
   }
 }
 
@@ -165,7 +177,6 @@ body {
   height: 100%;
   max-width: 100%;
   overflow: hidden;
-  transform-style: preserve-3d;
 }
 
 /* Layers: Background, Text, Subject Cutout */
@@ -178,6 +189,10 @@ body {
   object-position: center top;
   pointer-events: none;
   user-select: none;
+}
+
+/* Promote layers only while the desktop parallax is actually running. */
+.hero[data-parallax] .hero-layer {
   will-change: transform;
 }
 
@@ -186,7 +201,14 @@ body {
   z-index: 1;
 }
 
-/* Layer 2: Hero Text Layer (Vector Plate) */
+/* Photo layers sit at 1.05× so parallax never reveals an edge; this base
+   scale is also the resting composition on devices without parallax. */
+.hero-layer-bg,
+.hero-layer-subject {
+  transform: scale(1.05);
+}
+
+/* Layer 2: Hero Text Layer */
 .hero-layer-text {
   z-index: 2;
   position: absolute;
@@ -194,63 +216,44 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  transition: filter 0.25s ease-out;
 }
 
-/* 1. Mobile Phone Portrait (default): large impactful vertical composition */
-.hero-text-mask {
-  -webkit-mask-image: url(/assets/hero-text-mobile.svg);
-  mask-image: url(/assets/hero-text-mobile.svg);
-  -webkit-mask-size: cover;
-  mask-size: cover;
-  -webkit-mask-position: center top;
-  mask-position: center top;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-}
-
-/* 2. Tablet Portrait (min-width: 640px and portrait aspect ratio): scaled vertical plate */
-@media (min-width: 640px) and (max-aspect-ratio: 1.049/1) {
-  .hero-text-mask {
-    -webkit-mask-image: url(/assets/hero-text-tablet.svg);
-    mask-image: url(/assets/hero-text-tablet.svg);
-  }
-}
-
-/* 3. Landscape screens (Desktop, Laptop, Tablet landscape, Mobile landscape): wide plate */
-@media (min-aspect-ratio: 1.05/1) {
-  .hero-text-mask {
-    -webkit-mask-image: url(/assets/hero-text.svg);
-    mask-image: url(/assets/hero-text.svg);
-  }
-}
-
-.hero-text-vector-plate {
+.hero-text-plate,
+.hero-text-webgl {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
-  pointer-events: none;
   display: block;
+  pointer-events: none;
 }
 
-.hero-text-vector-plate img {
+.hero-text-plate img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center top;
-  pointer-events: none;
   display: block;
 }
+
+.hero-text-static { z-index: 1; transition: opacity 0.35s ease-out; }
+.hero-text-webgl { z-index: 1; opacity: 0; transition: opacity 0.35s ease-out; }
+.hero-text-borders { z-index: 2; }
+
+/* Cross-fade to the WebGL plate once its first frame is on screen. */
+.hero[data-webgl="ready"] .hero-text-webgl { opacity: 1; }
+.hero[data-webgl="ready"] .hero-text-static { opacity: 0; }
 
 /* Layer 3: Foreground Subject Cutout (Identical photo coordinate lock) */
 .hero-layer-subject {
   z-index: 3;
 }
 
-/* Color Grade Overlay (Warm Amber Highlights + Cool Cinematic Slate Shadows) */
+/* Color Grade Overlay (warm highlights + cool slate shadows)
+   Normal-blend equivalents of the previous soft-light / overlay layers.
+   mix-blend-mode forced the whole hero into an isolated blend group that was
+   re-composited every frame the WebGL ripple or parallax moved, and cost
+   ≈30 ms/frame while scrolling in software compositors (Firefox). */
 .hero-color-grade {
   position: absolute;
   inset: 0;
@@ -258,11 +261,10 @@ body {
   height: 100%;
   z-index: 5;
   pointer-events: none;
-  background: 
-    radial-gradient(ellipse 70% 50% at 78% 18%, rgba(245, 175, 80, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 80% 60% at 18% 70%, rgba(35, 60, 95, 0.14) 0%, transparent 65%),
-    linear-gradient(180deg, rgba(16, 22, 34, 0.08) 0%, rgba(229, 29, 36, 0.04) 40%, rgba(8, 9, 11, 0.12) 100%);
-  mix-blend-mode: soft-light;
+  background:
+    radial-gradient(ellipse 70% 50% at 78% 18%, rgba(245, 175, 80, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 18% 70%, rgba(35, 60, 95, 0.07) 0%, transparent 65%),
+    linear-gradient(180deg, rgba(16, 22, 34, 0.03) 0%, rgba(229, 29, 36, 0.012) 40%, rgba(8, 9, 11, 0.1) 100%);
 }
 
 /* Subtle Film Tone Harmonizer */
@@ -273,8 +275,7 @@ body {
   height: 100%;
   z-index: 6;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 230, 200, 0.03) 0%, rgba(15, 20, 30, 0.06) 100%);
-  mix-blend-mode: overlay;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 230, 200, 0.012) 0%, rgba(15, 20, 30, 0.035) 100%);
 }
 
 /* Feathered Bottom Blend into page content */
@@ -307,13 +308,11 @@ body {
   opacity: 0.35;
   transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
-  background: rgba(8, 9, 11, 0.2);
+  background: rgba(8, 9, 11, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.06);
   padding: 0.35rem 0.7rem;
   border-radius: 9999px;
   pointer-events: auto;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Hide scroll cue on landscape mobile (too little vertical space) */
@@ -421,17 +420,14 @@ body {
 }
 .animate-metric-bar-1 {
   transform-origin: bottom;
-  will-change: transform;
   animation: metric-bar-1 1.2s ease-in-out infinite;
 }
 .animate-metric-bar-2 {
   transform-origin: bottom;
-  will-change: transform;
   animation: metric-bar-2 1.4s ease-in-out infinite 0.2s;
 }
 .animate-metric-bar-3 {
   transform-origin: bottom;
-  will-change: transform;
   animation: metric-bar-3 1.1s ease-in-out infinite 0.4s;
 }
 
@@ -450,18 +446,50 @@ body {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
-/* ---- Reduced Motion Overrides ---- */
+/* ---- Decorative loop control ----
+   Infinite decorative animations are paused while their section is off-screen
+   (data-offscreen is toggled by <OffscreenAnimationPauser/>), and disabled
+   outright for reduced-motion users and the low render tier. */
+[data-anim-scope][data-offscreen] *,
+[data-anim-scope][data-offscreen] {
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-scan-light,
   .animate-metric-bar-1,
   .animate-metric-bar-2,
   .animate-metric-bar-3,
-  .animate-shiny {
-    animation: none;
-  }
+  .animate-shiny,
+  .animate-pulse,
   .scroll-wheel {
     animation: none;
   }
+}
+
+html[data-tier="low"] .animate-scan-light,
+html[data-tier="low"] .animate-metric-bar-1,
+html[data-tier="low"] .animate-metric-bar-2,
+html[data-tier="low"] .animate-metric-bar-3,
+html[data-tier="low"] .animate-shiny,
+html[data-tier="low"] .animate-pulse {
+  animation: none;
+}
+
+/* ---- Modal entrance (opacity/transform only) ---- */
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translate3d(0, 16px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.modal-backdrop-in { animation: modal-fade 180ms ease-out both; }
+.modal-panel-in { animation: modal-rise 240ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop-in,
+  .modal-panel-in { animation: none; }
 }
 
 /* React Bits Shiny Text */
@@ -474,3 +502,78 @@ body {
   animation: shiny-text 4s linear infinite;
 }
 
+
+/* ---- Circular gallery (DOM/CSS transform implementation) ---- */
+.cg-root {
+  touch-action: pan-y;
+  cursor: grab;
+}
+.cg-root[data-dragging] {
+  cursor: grabbing;
+}
+.cg-card {
+  position: absolute;
+  left: 0;
+  top: calc(50% - var(--cg-card-h, 0px) / 2);
+  width: var(--cg-card-w, 0px);
+  transform-origin: 50% calc(var(--cg-card-h, 0px) / 2);
+  will-change: transform;
+}
+.cg-root:not([data-ready]) .cg-card {
+  visibility: hidden;
+}
+.cg-media {
+  position: relative;
+  width: 100%;
+  height: var(--cg-card-h, 0px);
+  background: #0c0e14;
+}
+/* Rounded corners are painted on the image itself rather than clipped by an
+   overflow:hidden parent: a rounded clip on 12 moving layers forced per-frame
+   mask work in software compositors (measured ≈14 ms/frame in Firefox). */
+.cg-media img {
+  border-radius: inherit;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+/* Inner vignette + ruby rim. A gradient instead of a blurred inset shadow
+   (another ≈14 ms/frame in software compositing); the rim is a hard 1.5px
+   spread shadow, which needs no blur pass. */
+.cg-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(ellipse 72% 72% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.34) 100%);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 70, 85, 0.22);
+}
+.cg-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(var(--cg-card-h, 0px) * 0.14);
+  /* Calibrated against the previous WebGL title planes. */
+  margin-top: calc(var(--cg-card-h, 0px) * 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: calc(var(--cg-card-h, 0px) * 0.051);
+  line-height: 1;
+  white-space: nowrap;
+  color: #ffffff;
+}
+
+/* ---- Flowing menu marquee: CSS loop, runs only while its row is open ---- */
+@keyframes fm-marquee {
+  to { transform: translate3d(calc(-100% / var(--fm-reps, 4)), 0, 0); }
+}
+.fm-marquee {
+  animation: fm-marquee var(--fm-duration, 15s) linear infinite;
+  animation-play-state: paused;
+}
+.fm-marquee[data-running] {
+  animation-play-state: running;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fm-marquee { animation: none; }
+}

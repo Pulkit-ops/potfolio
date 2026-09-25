@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import FlowingMenu from "@/components/ui/FlowingMenu";
 import ShinyText from "@/components/ui/ShinyText";
@@ -29,6 +27,7 @@ export default function MetricsStrip() {
   return (
     <section
       id="explore-section"
+      data-anim-scope
       className="w-full relative z-20 pt-16 sm:pt-28 lg:pt-40 pb-4 sm:pb-10 bg-gradient-to-b from-[#08090b] via-[#090b10] to-[#0c0e14] border-b border-white/5 overflow-hidden"
     >
       {/* Clean, Refined Minimalist Heading */}
@@ -55,7 +54,7 @@ export default function MetricsStrip() {
           marqueeBgColor="#e51d24"
           marqueeTextColor="#ffffff"
           borderColor="rgba(255, 255, 255, 0.08)"
-          className="w-full bg-[#07080a]/40 backdrop-blur-sm"
+          className="w-full bg-[#07080a]/40"
         />
       </div>
     </section>

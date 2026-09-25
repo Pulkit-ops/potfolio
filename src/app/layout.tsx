@@ -1,34 +1,35 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, Outfit, Plus_Jakarta_Sans, Alex_Brush } from "next/font/google";
+import { Anton, Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import Footer from "@/components/layout/Footer";
 import AmbientGlow from "@/components/layout/AmbientGlow";
+import OffscreenAnimationPauser from "@/components/layout/OffscreenAnimationPauser";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ContactModalProvider } from "@/components/contact/ContactModalContext";
+import { TIER_BOOT_SCRIPT } from "@/lib/tierBootScript";
 
+// Only the body face is preloaded: it paints the first text on every page.
+// Display/heading faces are requested as soon as CSS needs them but no longer
+// compete with the hero image for bandwidth on slow connections. Next's
+// size-adjusted fallbacks keep the swap free of layout shift.
 const anton = Anton({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-anton",
   display: "swap",
+  preload: false,
 });
 
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
   display: "swap",
+  preload: false,
 });
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-jakarta",
-  display: "swap",
-});
-
-const alexBrush = Alex_Brush({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-script",
   display: "swap",
 });
 
@@ -64,8 +65,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${anton.variable} ${outfit.variable} ${jakarta.variable} ${alexBrush.variable}`}
+      data-scroll-behavior="smooth"
+      className={`${anton.variable} ${outfit.variable} ${jakarta.variable}`}
+      // The tier boot script adds data-tier / data-pointer before hydration.
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TIER_BOOT_SCRIPT }} />
+      </head>
       <body className="bg-[#08090b] text-[#f5f6f8] min-h-screen relative antialiased selection:bg-[#e51d24] selection:text-white">
         <ToastProvider>
           <ContactModalProvider>
@@ -74,6 +81,7 @@ export default function RootLayout({
             <Footer />
           </ContactModalProvider>
         </ToastProvider>
+        <OffscreenAnimationPauser />
       </body>
     </html>
   );

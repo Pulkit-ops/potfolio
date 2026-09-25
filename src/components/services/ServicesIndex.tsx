@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { ServiceDetailedItem } from "@/data/servicesData";
 
 interface ServicesIndexProps {
@@ -18,43 +18,52 @@ export default function ServicesIndex({
   const currentNum = activeIndex >= 0 ? services[activeIndex].number : "01";
   const totalNum = String(services.length).padStart(2, "0");
 
-  // Keyboard navigation: 1-4 and ArrowUp / ArrowDown
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Quick-jump keys (1–N, ↑/↓, j/k). These used to be bound globally at all
+  // times — pressing ↓ anywhere on the page (even in the hero, or on phones
+  // where this panel is hidden) called preventDefault and teleported the page
+  // to the services track. They are now live only while this panel is on
+  // screen, and never while typing, with modifiers held, or inside a dialog.
   useEffect(() => {
+    const aside = asideRef.current;
+    if (!aside) return;
+    let inView = false;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Avoid intercepting if user is typing in an input
-      if (
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA"
-      ) {
+      if (!inView || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role='dialog']"))) {
         return;
       }
-
       if (e.key >= "1" && e.key <= String(services.length)) {
-        const targetIdx = parseInt(e.key, 10) - 1;
-        if (services[targetIdx]) {
-          onSelect(services[targetIdx].id);
-        }
-      } else if (e.key === "ArrowDown" || e.key === "j") {
-        if (activeIndex < services.length - 1) {
-          e.preventDefault();
-          onSelect(services[activeIndex + 1].id);
-        }
-      } else if (e.key === "ArrowUp" || e.key === "k") {
-        if (activeIndex > 0) {
-          e.preventDefault();
-          onSelect(services[activeIndex - 1].id);
-        }
+        const target = services[parseInt(e.key, 10) - 1];
+        if (target) onSelect(target.id);
+      } else if ((e.key === "ArrowDown" || e.key === "j") && activeIndex < services.length - 1) {
+        e.preventDefault();
+        onSelect(services[activeIndex + 1].id);
+      } else if ((e.key === "ArrowUp" || e.key === "k") && activeIndex > 0) {
+        e.preventDefault();
+        onSelect(services[activeIndex - 1].id);
       }
     };
 
+    const io = new IntersectionObserver((entries) => {
+      inView = entries[0].intersectionRatio >= 0.6;
+    }, { threshold: [0, 0.6, 1] });
+    io.observe(aside);
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      io.disconnect();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [activeIndex, services, onSelect]);
 
   return (
     <aside
+      ref={asideRef}
       aria-label="Services navigation index"
-      className="w-full bg-[#0b0d13]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl shadow-black/80 select-none"
+      className="w-full bg-[#0b0d13] border border-white/10 rounded-2xl p-6 shadow-2xl shadow-black/80 select-none"
     >
       {/* Current Position Counter */}
       <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
@@ -76,7 +85,7 @@ export default function ServicesIndex({
             <button
               key={service.id}
               onClick={() => onSelect(service.id)}
-              className={`w-full text-left px-3.5 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${
+              className={`w-full text-left px-3.5 py-3 rounded-xl transition-colors duration-300 flex items-center justify-between group ${
                 isActive
                   ? "bg-white/[0.08] text-white border border-[#e51d24]/40 shadow-[0_0_20px_rgba(229,29,36,0.15)]"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03] border border-transparent"

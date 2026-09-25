@@ -1,5 +1,10 @@
 <svg viewBox="0 0 1448 1086" width="1448" height="1086" xmlns="http://www.w3.org/2000/svg" class="hero-text-svg">
   <defs>
+    <linearGradient id="liquid-rest" gradientUnits="userSpaceOnUse" x1="0" y1="69.5" x2="0" y2="673">
+      <stop offset="0" stop-color="#f53036"/>
+      <stop offset="0.5" stop-color="#d81d24"/>
+      <stop offset="1" stop-color="#c4131a"/>
+    </linearGradient>
     <style>
       @font-face {
         font-family: 'Anton';
@@ -7,7 +12,7 @@
       }
       .anton-text {
         font-family: 'Anton', sans-serif;
-        fill: none; stroke: #e51d24; stroke-width: 2.5px; stroke-linejoin: round;
+        fill: url(#liquid-rest);
       }
     </style>
     <mask id="media-knockout-mask">
@@ -62,7 +67,7 @@
   </g>
 
   <g transform="scale(1.134796, 1.138365)">
-    <g transform="translate(0.000000,954.000000) scale(1.000000,-1.000000)" fill="none" stroke="#e51d24" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <g transform="translate(0.000000,954.000000) scale(1.000000,-1.000000)" fill="url(#liquid-rest)" stroke="none">
       <path d="M557 762 c-33 -3 -59 -17 -72 -40 -6 -10 -8 -27 -5 -37 7 -19 25 -31
 48 -31 10 0 15 1 25 6 12 6 24 20 24 30 0 3 0 4 -2 4 -1 0 -2 -1 -4 -5 -5 -11
 -17 -22 -29 -26 -6 -2 -8 -2 -16 -2 -8 1 -12 1 -15 3 -14 6 -21 20 -17 34 7

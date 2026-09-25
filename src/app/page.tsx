@@ -23,6 +23,7 @@ export default function Home() {
       {/* Part 2: Full-Bleed Proven Viral Results Section (Cards appear from ends of the screen) */}
       <section
         id="proven-results"
+        data-anim-scope
         className="w-full relative py-4 sm:py-12 overflow-hidden bg-gradient-to-b from-transparent via-[#0b0d12]/50 to-transparent"
       >
         {/* Stylized Section Header with ShinyText & Interactive Controls */}
@@ -72,7 +73,6 @@ export default function Home() {
             borderRadius={0.16}
             scrollSpeed={2.5}
             scrollEase={0.08}
-            textColor="#ffffff"
           />
 
           {/* Bottom edge gradient blend */}
@@ -107,7 +107,7 @@ export default function Home() {
         >
           {/* Subtle Ambient Red Glow */}
           <div
-            className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-[#e51d24]/10 blur-3xl"
+            className="pointer-events-none absolute -top-72 left-1/2 -translate-x-1/2 w-[44rem] h-[44rem] rounded-full bloom-red"
             aria-hidden="true"
           />
 

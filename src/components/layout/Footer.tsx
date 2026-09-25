@@ -8,7 +8,7 @@ import {
   InstagramIcon,
   LinkedInIcon,
   WhatsAppIcon,
-} from "@/components/contact/ContactModal";
+} from "@/components/contact/SocialIcons";
 import { Mail } from "lucide-react";
 
 export default function Footer() {

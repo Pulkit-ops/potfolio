@@ -1,10 +1,6 @@
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
+import React, { useEffect, useRef } from "react";
 import { ServiceDetailedItem } from "@/data/servicesData";
 import ServiceCardEditorial from "./ServiceCardEditorial";
 
@@ -12,8 +8,6 @@ interface HTML3DCrumpleStageProps {
   services: ServiceDetailedItem[];
   containerRef: React.RefObject<HTMLDivElement | null>;
   stageWrapperRef: React.RefObject<HTMLDivElement | null>;
-  isDesktop: boolean;
-  prefersReducedMotion: boolean;
   onCardChange?: (index: number) => void;
   activeId: string;
 }
@@ -21,359 +15,247 @@ interface HTML3DCrumpleStageProps {
 // ---------------------------------------------------------------------------
 // Math & Easing Helpers
 // ---------------------------------------------------------------------------
-const clamp = (val: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, val));
+const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
 
 // Smooth cubic S-curve: f(x) = x^2 * (3 - 2x)
 const smoothstep = (x: number) => x * x * (3 - 2 * x);
 
+const TOSS_X = 960;
+const TOSS_Y = -460;
+
+/**
+ * Desktop-only paper crumple & toss stage.
+ *
+ * Performance notes (vs. the previous version):
+ *  - The spring loop used to run requestAnimationFrame forever, on every
+ *    device (including phones, where this stage is display:none). It now runs
+ *    only while progress is converging and sleeps otherwise.
+ *  - Scroll handling attaches only while the track is near the viewport and
+ *    derives progress from scrollY + cached offsets, instead of two
+ *    getBoundingClientRect() calls plus offsetHeight per scroll event.
+ *  - Per-frame writes are limited to transform / opacity / clip-path. The old
+ *    animated border-radius and 60px inset box-shadow (a full repaint of an
+ *    880×690 card each frame) are replaced by a pre-rendered shade layer whose
+ *    opacity is animated.
+ */
 export default function HTML3DCrumpleStage({
   services,
   containerRef,
   stageWrapperRef,
-  isDesktop,
-  prefersReducedMotion,
   onCardChange,
   activeId,
 }: HTML3DCrumpleStageProps) {
-  const stageViewportRef = useRef<HTMLDivElement>(null);
   const cardContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cardInnerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cardCreaseRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const cardShadeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Stable ref for the onCardChange callback — avoids putting it in useCallback deps
-  // which would cascade through the entire effect chain and reset the animation.
   const onCardChangeRef = useRef(onCardChange);
   onCardChangeRef.current = onCardChange;
 
-  // Smooth scroll interpolation state (RAF loop)
-  const stateRef = useRef({
-    currentProgress: 0,
-    targetProgress: 0,
-    velocity: 0,
-    lastTime: performance.now(),
-    animFrameId: 0,
-    lastReportedIndex: 0,
-    isDisposed: false,
-  });
+  useEffect(() => {
+    const container = containerRef.current;
+    const stage = stageWrapperRef.current;
+    if (!container || !stage) return;
 
-  // Guard: applyCardTransforms(0) should only run on true first mount
-  const hasMountedRef = useRef(false);
+    const desktopMq = window.matchMedia("(min-width: 1024px)");
+    const reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const N = services.length - 1;
 
+    let current = 0;
+    let target = 0;
+    let lastTime = 0;
+    let raf = 0;
+    let lastReported = 0;
+    let active = false;
 
-  // -------------------------------------------------------------------------
-  // Core 3D Card Animation Renderer
-  // Directly updates DOM styles for zero-lag, 120fps hardware acceleration
-  // -------------------------------------------------------------------------
-  const applyCardTransforms = useCallback(
-    (progress: number) => {
-      const N = services.length - 1; // 3
-      const clampedP = clamp(progress, 0, N);
-      const baseIdx = Math.min(Math.floor(clampedP), N - 1);
-      const t = clampedP - baseIdx; // 0.0 to 1.0 between baseIdx and baseIdx + 1
+    // Cached layout
+    let trackTop = 0;
+    let stickyTop = 0;
+    let travel = 1;
 
-      // Accurate active index reporting:
-      // When t >= 0.70, the leaving card is already mostly crumpled/gone and the next card is dominant
-      const currentActiveIdx =
-        clampedP >= N ? N : t >= 0.7 ? baseIdx + 1 : baseIdx;
-      if (currentActiveIdx !== stateRef.current.lastReportedIndex) {
-        stateRef.current.lastReportedIndex = currentActiveIdx;
-        onCardChangeRef.current?.(currentActiveIdx);
+    const measure = () => {
+      const r = container.getBoundingClientRect();
+      trackTop = r.top + window.scrollY;
+      stickyTop = parseFloat(getComputedStyle(stage).top) || 0;
+      travel = Math.max(1, container.offsetHeight - stage.offsetHeight);
+    };
+
+    const setCard = (
+      k: number,
+      transform: string,
+      opacity: number,
+      visible: boolean,
+      interactive: boolean,
+      zIndex: number,
+      crease: number,
+      shade: number,
+      clip: string
+    ) => {
+      const cardEl = cardContainerRefs.current[k];
+      const innerEl = cardInnerRefs.current[k];
+      if (!cardEl || !innerEl) return;
+      cardEl.style.transform = transform;
+      cardEl.style.opacity = String(opacity);
+      cardEl.style.visibility = visible ? "visible" : "hidden";
+      cardEl.style.pointerEvents = interactive ? "auto" : "none";
+      cardEl.style.zIndex = String(zIndex);
+      innerEl.style.clipPath = clip;
+      const creaseEl = cardCreaseRefs.current[k];
+      if (creaseEl) creaseEl.style.opacity = String(crease);
+      const shadeEl = cardShadeRefs.current[k];
+      if (shadeEl) shadeEl.style.opacity = String(shade);
+    };
+
+    const apply = (progress: number) => {
+      const reduced = reduceMq.matches;
+      const p = clamp(progress, 0, N);
+      const baseIdx = Math.min(Math.floor(p), N - 1);
+      const t = p - baseIdx;
+
+      // The next card becomes "active" once the leaving card is mostly gone.
+      const activeIdx = p >= N ? N : t >= 0.7 ? baseIdx + 1 : baseIdx;
+      if (activeIdx !== lastReported) {
+        lastReported = activeIdx;
+        onCardChangeRef.current?.(activeIdx);
       }
 
-      services.forEach((_, k) => {
-        const cardEl = cardContainerRefs.current[k];
-        const innerEl = cardInnerRefs.current[k];
-        const creaseEl = cardCreaseRefs.current[k];
-        if (!cardEl || !innerEl) return;
-
-        // Case 1: Cards in the past (already tossed away)
+      for (let k = 0; k <= N; k++) {
+        // Already tossed away
         if (k < baseIdx) {
-          const tossX = isDesktop ? 960 : 480;
-          const tossY = isDesktop ? -460 : -340;
-          cardEl.style.transform = `translate3d(${tossX}px, ${tossY}px, -480px) rotateX(55deg) rotateY(-85deg) rotateZ(30deg) scale(0.4)`;
-          cardEl.style.opacity = "0";
-          cardEl.style.visibility = "hidden";
-          cardEl.style.pointerEvents = "none";
-          cardEl.style.zIndex = "10";
-          if (creaseEl) creaseEl.style.opacity = "0";
-          innerEl.style.clipPath = "none";
-          innerEl.style.borderRadius = "1.5rem";
-          innerEl.style.boxShadow = "none";
-          return;
+          setCard(k, `translate3d(${TOSS_X}px, ${TOSS_Y}px, -480px) rotateX(55deg) rotateY(-85deg) rotateZ(30deg) scale(0.4)`, 0, false, false, 10, 0, 0, "none");
+          continue;
         }
-
-        // Case 2: The very last card at the end of the scroll track
-        if (clampedP >= N && k === N) {
-          cardEl.style.transform = "translate3d(0, 0, 0) scale(1)";
-          cardEl.style.opacity = "1";
-          cardEl.style.visibility = "visible";
-          cardEl.style.pointerEvents = "auto";
-          cardEl.style.zIndex = "50";
-          if (creaseEl) creaseEl.style.opacity = "0";
-          innerEl.style.clipPath = "none";
-          innerEl.style.borderRadius = "1.5rem";
-          innerEl.style.boxShadow = "0 32px 80px rgba(0,0,0,0.9)";
-          return;
+        // Last card resting at the end of the track
+        if (p >= N && k === N) {
+          setCard(k, "translate3d(0, 0, 0)", 1, true, true, 50, 0, 0, "none");
+          continue;
         }
-
-        // Case 3: The Active Leaving Card (k === baseIdx)
+        // Leaving card
         if (k === baseIdx) {
-          cardEl.style.visibility = "visible";
-          cardEl.style.zIndex = "50";
-
-          // Reduced motion fallback
-          if (prefersReducedMotion) {
-            const fade = clamp(1 - t * 1.6, 0, 1);
-            cardEl.style.transform = `translate3d(0, ${-t * 50}px, 0)`;
-            cardEl.style.opacity = String(fade);
-            cardEl.style.pointerEvents = t > 0.2 ? "none" : "auto";
-            if (creaseEl) creaseEl.style.opacity = "0";
-            return;
+          if (reduced) {
+            setCard(k, `translate3d(0, ${(-t * 50).toFixed(1)}px, 0)`, clamp(1 - t * 1.6, 0, 1), true, t <= 0.2, 50, 0, 0, "none");
+            continue;
           }
-
-          // -----------------------------------------------------------------
-          // PHYSICAL PAPER CRUMPLE & KINETIC TOSS CHOREOGRAPHY
-          //
-          // t in [0.00, 0.55]: STABLE READING DWELL ZONE
-          // 100% flat at (0, 0, 0), zero jitter, full cursor interactivity
-          //
-          // t in [0.55, 1.00]: TACTILE CRUMPLE CRUNCH & PARABOLIC TOSS
-          // Progressive polygonal crunch, crease shading, and projectile flyaway
-          // -----------------------------------------------------------------
+          // t ∈ [0, 0.55]: flat reading dwell
           if (t <= 0.55) {
-            // Resting flat in the center
-            cardEl.style.transform = "translate3d(0, 0, 0) scale(1)";
-            cardEl.style.opacity = "1";
-            cardEl.style.pointerEvents = "auto";
-            innerEl.style.clipPath = "none";
-            innerEl.style.borderRadius = "1.5rem";
-            innerEl.style.boxShadow = "0 32px 80px rgba(0,0,0,0.9)";
-            if (creaseEl) creaseEl.style.opacity = "0";
-          } else {
-            // Transition progress u from 0.0 to 1.0
-            const u = (t - 0.55) / 0.45;
-
-            if (u <= 0.48) {
-              // PHASE A: CRUNCH & PAPER CRUMPLE (u in [0.00, 0.48])
-              const c = u / 0.48; // 0 to 1
-              const cEased = smoothstep(c);
-
-              // 3D torsional rotation during crumple
-              const rotX = cEased * 26;
-              const rotY = -cEased * 38;
-              const rotZ = cEased * 16;
-
-              // Compressive scale
-              const scaleX = 1 - cEased * 0.42;
-              const scaleY = 1 - cEased * 0.48;
-              const scaleZ = 1 + cEased * 1.6;
-
-              // Lateral lift off surface
-              const posX = cEased * (isDesktop ? 120 : 60);
-              const posY = -cEased * (isDesktop ? 70 : 40);
-              const posZ = cEased * 40;
-
-              cardEl.style.transform = `translate3d(${posX.toFixed(1)}px, ${posY.toFixed(1)}px, ${posZ.toFixed(1)}px) rotateX(${rotX.toFixed(1)}deg) rotateY(${rotY.toFixed(1)}deg) rotateZ(${rotZ.toFixed(1)}deg) scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`;
-              cardEl.style.opacity = "1";
-              cardEl.style.pointerEvents = "none";
-
-              // Morphing irregular crumple edge polygon
-              const p0x = (cEased * 10).toFixed(1);
-              const p0y = (cEased * 6).toFixed(1);
-              const p1x = (50 - cEased * 2).toFixed(1);
-              const p1y = (cEased * 14).toFixed(1);
-              const p2x = (100 - cEased * 10).toFixed(1);
-              const p2y = (cEased * 8).toFixed(1);
-              const p3x = (100 - cEased * 5).toFixed(1);
-              const p3y = (50 - cEased * 5).toFixed(1);
-              const p4x = (100 - cEased * 12).toFixed(1);
-              const p4y = (100 - cEased * 10).toFixed(1);
-              const p5x = (50 + cEased * 2).toFixed(1);
-              const p5y = (100 - cEased * 18).toFixed(1);
-              const p6x = (cEased * 14).toFixed(1);
-              const p6y = (100 - cEased * 8).toFixed(1);
-              const p7x = (cEased * 6).toFixed(1);
-              const p7y = "50";
-
-              innerEl.style.clipPath = `polygon(${p0x}% ${p0y}%, ${p1x}% ${p1y}%, ${p2x}% ${p2y}%, ${p3x}% ${p3y}%, ${p4x}% ${p4y}%, ${p5x}% ${p5y}%, ${p6x}% ${p6y}%, ${p7x}% ${p7y}%)`;
-              innerEl.style.borderRadius = `${(24 + cEased * 30).toFixed(0)}px`;
-              innerEl.style.boxShadow = `inset 0 0 ${(cEased * 60).toFixed(0)}px rgba(0,0,0,0.95), 0 30px 60px rgba(0,0,0,0.85)`;
-
-              // Crease lines opacity ramp
-              if (creaseEl) {
-                creaseEl.style.opacity = String(clamp(cEased * 1.3, 0, 1));
-              }
-            } else {
-              // PHASE B: KINETIC PARABOLIC TOSS (u in [0.48, 1.00])
-              const v = (u - 0.48) / 0.52; // 0 to 1
-              const vAccel = Math.pow(v, 1.4);
-
-              const startX = isDesktop ? 120 : 60;
-              const startY = isDesktop ? -70 : -40;
-              const startZ = 40;
-
-              const tossDistX = isDesktop ? 820 : 420;
-              const posX = startX + vAccel * tossDistX;
-              // Ballistic flight arc (rises then arcs down)
-              const posY = startY - 260 * v + 240 * (v * v);
-              const posZ = startZ - Math.pow(v, 2) * (isDesktop ? 480 : 360);
-
-              const rotX = 26 + v * (isDesktop ? 75 : 55);
-              const rotY = -38 - v * (isDesktop ? 130 : 90);
-              const rotZ = 16 + v * (isDesktop ? 50 : 35);
-              const scale = (0.55 * (1 - v * 0.35)).toFixed(3);
-
-              // Clean fade dissolve
-              const opacity = clamp(1 - (v - 0.2) / 0.75, 0, 1);
-
-              cardEl.style.transform = `translate3d(${posX.toFixed(1)}px, ${posY.toFixed(1)}px, ${posZ.toFixed(1)}px) rotateX(${rotX.toFixed(1)}deg) rotateY(${rotY.toFixed(1)}deg) rotateZ(${rotZ.toFixed(1)}deg) scale(${scale})`;
-              cardEl.style.opacity = String(opacity);
-              cardEl.style.pointerEvents = "none";
-
-              if (creaseEl) {
-                creaseEl.style.opacity = String(clamp(opacity, 0, 1));
-              }
-            }
+            setCard(k, "translate3d(0, 0, 0)", 1, true, true, 50, 0, 0, "none");
+            continue;
           }
-          return;
+          const u = (t - 0.55) / 0.45;
+          if (u <= 0.48) {
+            // Phase A: crunch & crumple
+            const c = smoothstep(u / 0.48);
+            const transform = `translate3d(${(c * 120).toFixed(1)}px, ${(-c * 70).toFixed(1)}px, ${(c * 40).toFixed(1)}px) rotateX(${(c * 26).toFixed(1)}deg) rotateY(${(-c * 38).toFixed(1)}deg) rotateZ(${(c * 16).toFixed(1)}deg) scale3d(${(1 - c * 0.42).toFixed(3)}, ${(1 - c * 0.48).toFixed(3)}, ${(1 + c * 1.6).toFixed(3)})`;
+            const f = (v: number) => v.toFixed(1);
+            const clip = `polygon(${f(c * 10)}% ${f(c * 6)}%, ${f(50 - c * 2)}% ${f(c * 14)}%, ${f(100 - c * 10)}% ${f(c * 8)}%, ${f(100 - c * 5)}% ${f(50 - c * 5)}%, ${f(100 - c * 12)}% ${f(100 - c * 10)}%, ${f(50 + c * 2)}% ${f(100 - c * 18)}%, ${f(c * 14)}% ${f(100 - c * 8)}%, ${f(c * 6)}% 50%)`;
+            setCard(k, transform, 1, true, false, 50, clamp(c * 1.3, 0, 1), c, clip);
+          } else {
+            // Phase B: parabolic toss
+            const v = (u - 0.48) / 0.52;
+            const va = Math.pow(v, 1.4);
+            const posX = 120 + va * 820;
+            const posY = -70 - 260 * v + 240 * v * v;
+            const posZ = 40 - v * v * 480;
+            const opacity = clamp(1 - (v - 0.2) / 0.75, 0, 1);
+            const transform = `translate3d(${posX.toFixed(1)}px, ${posY.toFixed(1)}px, ${posZ.toFixed(1)}px) rotateX(${(26 + v * 75).toFixed(1)}deg) rotateY(${(-38 - v * 130).toFixed(1)}deg) rotateZ(${(16 + v * 50).toFixed(1)}deg) scale(${(0.55 * (1 - v * 0.35)).toFixed(3)})`;
+            const clip = "polygon(10% 6%, 48% 14%, 90% 8%, 95% 45%, 88% 90%, 52% 82%, 14% 92%, 6% 50%)";
+            setCard(k, transform, opacity, true, false, 50, opacity, 1, clip);
+          }
+          continue;
         }
-
-        // Case 4: The Entering Card (k === baseIdx + 1)
+        // Entering card
         if (k === baseIdx + 1) {
-          cardEl.style.visibility = "visible";
-          cardEl.style.zIndex = "40";
-          innerEl.style.clipPath = "none";
-          innerEl.style.borderRadius = "1.5rem";
-          innerEl.style.boxShadow = "0 32px 80px rgba(0,0,0,0.9)";
-          if (creaseEl) creaseEl.style.opacity = "0";
-
-          if (prefersReducedMotion) {
-            const enterFade = clamp(t * 1.8 - 0.6, 0, 1);
-            cardEl.style.transform = `translate3d(0, ${(1 - enterFade) * 30}px, 0)`;
-            cardEl.style.opacity = String(enterFade);
-            cardEl.style.pointerEvents = t > 0.8 ? "auto" : "none";
-            return;
+          if (reduced) {
+            const e = clamp(t * 1.8 - 0.6, 0, 1);
+            setCard(k, `translate3d(0, ${((1 - e) * 30).toFixed(1)}px, 0)`, e, true, t > 0.8, 40, 0, 0, "none");
+            continue;
           }
-
           if (t <= 0.55) {
-            // Waiting neatly underneath in stack
-            cardEl.style.transform = "translate3d(0, 20px, -35px) scale(0.96)";
-            cardEl.style.opacity = "0.35";
-            cardEl.style.pointerEvents = "none";
+            setCard(k, "translate3d(0, 20px, -35px) scale(0.96)", 0.35, true, false, 40, 0, 0, "none");
           } else {
-            // Smoothly elevates and un-dims as Card k crunches & tosses away
-            const w = (t - 0.55) / 0.45; // 0 to 1
-            const wEased = 1 - Math.pow(1 - w, 3); // cubic ease-out
-
-            const curY = 20 * (1 - wEased);
-            const curZ = -35 * (1 - wEased);
-            const curScale = 0.96 + 0.04 * wEased;
-            const curOpacity = 0.35 + 0.65 * wEased;
-
-            cardEl.style.transform = `translate3d(0, ${curY.toFixed(1)}px, ${curZ.toFixed(1)}px) scale(${curScale.toFixed(3)})`;
-            cardEl.style.opacity = String(curOpacity.toFixed(3));
-            cardEl.style.pointerEvents = w > 0.8 ? "auto" : "none";
+            const w = (t - 0.55) / 0.45;
+            const we = 1 - Math.pow(1 - w, 3);
+            setCard(k, `translate3d(0, ${(20 * (1 - we)).toFixed(1)}px, ${(-35 * (1 - we)).toFixed(1)}px) scale(${(0.96 + 0.04 * we).toFixed(3)})`, +(0.35 + 0.65 * we).toFixed(3), true, w > 0.8, 40, 0, 0, "none");
           }
-          return;
+          continue;
         }
-
-        // Case 5: Deep background cards (k > baseIdx + 1)
-        if (k > baseIdx + 1) {
-          cardEl.style.transform = "translate3d(0, 40px, -70px) scale(0.92)";
-          cardEl.style.opacity = "0";
-          cardEl.style.visibility = "hidden";
-          cardEl.style.pointerEvents = "none";
-          cardEl.style.zIndex = "10";
-          if (creaseEl) creaseEl.style.opacity = "0";
-        }
-      });
-    },
-    [isDesktop, prefersReducedMotion, services]
-  );
-
-  // -------------------------------------------------------------------------
-  // High-Performance Spring Animation Loop (120 FPS, Zero React Re-renders)
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const state = stateRef.current;
-    state.isDisposed = false;
-
-    const renderLoop = (time: number) => {
-      if (state.isDisposed) return;
-      state.animFrameId = requestAnimationFrame(renderLoop);
-
-      const dt = Math.min(0.05, (time - state.lastTime) / 1000);
-      state.lastTime = time;
-
-      // Critically damped spring physics:
-      // Snappy responsiveness (omega = 24 rad/s) catches up instantly to rapid scroll
-      // yet filters out discrete mousewheel notch clicks with zero latency.
-      const diff = state.targetProgress - state.currentProgress;
-
-      if (Math.abs(diff) > 0.0001) {
-        const decay = 1 - Math.exp(-24 * dt);
-        state.currentProgress += diff * decay;
-        applyCardTransforms(state.currentProgress);
+        // Deep background
+        setCard(k, "translate3d(0, 40px, -70px) scale(0.92)", 0, false, false, 10, 0, 0, "none");
       }
     };
 
-    state.animFrameId = requestAnimationFrame(renderLoop);
-
-    return () => {
-      state.isDisposed = true;
-      cancelAnimationFrame(state.animFrameId);
+    // Critically damped follow (ω = 24 rad/s): absorbs wheel-notch steps,
+    // then stops scheduling frames once settled.
+    const tick = (time: number) => {
+      raf = 0;
+      const dt = lastTime ? Math.min(0.05, (time - lastTime) / 1000) : 1 / 60;
+      lastTime = time;
+      const diff = target - current;
+      if (Math.abs(diff) < 0.0005) {
+        current = target;
+        apply(current);
+        lastTime = 0;
+        return;
+      }
+      current += diff * (1 - Math.exp(-24 * dt));
+      apply(current);
+      raf = requestAnimationFrame(tick);
     };
-  }, [applyCardTransforms]);
 
-  // -------------------------------------------------------------------------
-  // Direct Window Scroll Listener
-  // Calculates exact progress without triggering React state updates
-  // -------------------------------------------------------------------------
-  useEffect(() => {
     const onScroll = () => {
-      const container = containerRef.current;
-      const stage = stageWrapperRef.current;
-      if (!container || !stage) return;
-
-      const stageRect = stage.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-
-      // Foolproof sticky progress:
-      // When stage enters sticky position, container scrolls up relative to stage
-      const scrolledPx = stageRect.top - containerRect.top;
-      const scrollDistance = container.offsetHeight - stage.offsetHeight;
-
-      if (scrollDistance <= 0) return;
-
-      const rawProgress = scrolledPx / scrollDistance;
-      const clamped = clamp(rawProgress, 0, 1);
-
-      // Raw uncompressed target progress across cards (0.0 to services.length - 1)
-      const target = clamped * (services.length - 1);
-      stateRef.current.targetProgress = target;
+      const scrolled = window.scrollY + stickyTop - trackTop;
+      target = clamp(scrolled / travel, 0, 1) * N;
+      if (!raf) raf = requestAnimationFrame(tick);
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-    onScroll();
+    const setActive = (on: boolean) => {
+      if (on === active) return;
+      active = on;
+      if (on) {
+        measure();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+      } else {
+        window.removeEventListener("scroll", onScroll);
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        lastTime = 0;
+        // Snap to the resting state for wherever the user left the track.
+        current = target;
+        apply(current);
+      }
+    };
 
-    // Initial mount styling guarantee — only on true first mount,
-    // NOT on every effect re-run (which would reset cards to position 0)
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      applyCardTransforms(0);
-    }
+    // display:none below lg → never intersects → nothing ever runs on phones.
+    const io = new IntersectionObserver((entries) => setActive(entries[0].isIntersecting && desktopMq.matches), {
+      rootMargin: "150px 0px",
+    });
+    io.observe(container);
+
+    const ro = new ResizeObserver(() => {
+      if (!active) return;
+      measure();
+      onScroll();
+    });
+    ro.observe(container);
+
+    const onReduce = () => apply(current);
+    reduceMq.addEventListener("change", onReduce);
+
+    apply(0);
 
     return () => {
+      io.disconnect();
+      ro.disconnect();
+      reduceMq.removeEventListener("change", onReduce);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
     };
-  }, [containerRef, stageWrapperRef, applyCardTransforms, services.length]);
+  }, [containerRef, stageWrapperRef, services.length]);
 
   return (
     <div
-      ref={stageViewportRef}
       className="relative w-full h-full flex items-center justify-center select-none"
       style={{
         perspective: "1600px",
@@ -393,6 +275,7 @@ export default function HTML3DCrumpleStage({
             style={{
               willChange: "transform, opacity",
               transformOrigin: "65% 50%",
+              visibility: idx <= 1 ? "visible" : "hidden",
               backfaceVisibility: "hidden",
               zIndex: idx === 0 ? 50 : 40 - idx * 10,
               opacity: idx === 0 ? 1 : 0,
@@ -407,18 +290,24 @@ export default function HTML3DCrumpleStage({
               ref={(el) => {
                 cardInnerRefs.current[idx] = el;
               }}
-              className="w-full relative rounded-3xl bg-[#0c0e13] shadow-2xl"
-              style={{
-                willChange: "clip-path, border-radius, box-shadow",
-              }}
+              className="w-full relative rounded-3xl bg-[#0c0e13]"
             >
+              {/* Crumple shading: static inset shadow, only its opacity animates */}
+              <div
+                ref={(el) => {
+                  cardShadeRefs.current[idx] = el;
+                }}
+                className="absolute inset-0 pointer-events-none rounded-3xl z-20 shadow-[inset_0_0_60px_rgba(0,0,0,0.95)]"
+                style={{ opacity: 0 }}
+                aria-hidden="true"
+              />
               {/* Dynamic Origami Crease & Fold Overlay Layer */}
               <div
                 ref={(el) => {
                   cardCreaseRefs.current[idx] = el;
                 }}
                 className="absolute inset-0 pointer-events-none rounded-3xl overflow-hidden z-30"
-                style={{ opacity: 0, willChange: "opacity" }}
+                style={{ opacity: 0 }}
                 aria-hidden="true"
               >
                 <svg
@@ -532,12 +421,7 @@ export default function HTML3DCrumpleStage({
               </div>
 
               {/* The Live Editorial HTML Card */}
-              <ServiceCardEditorial
-                service={service}
-                isActive={isCurrentActive}
-                index={idx}
-                total={services.length}
-              />
+              <ServiceCardEditorial service={service} isActive={isCurrentActive} />
             </div>
           </div>
         );

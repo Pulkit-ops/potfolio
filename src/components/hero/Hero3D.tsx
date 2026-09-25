@@ -1,281 +1,242 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
-import RippleDistortion from "@/components/ui/RippleDistortion";
+import React, { useRef, useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
+import Image from "next/image";
+import { onIdle, useRenderCaps } from "@/lib/renderTier";
+import type { RipplePlateSource } from "@/components/ui/RippleDistortion";
+
+// WebGL (OGL + shaders) is split out of the initial bundle and only fetched on
+// devices that will actually run it.
+const RippleDistortion = dynamic(() => import("@/components/ui/RippleDistortion"), { ssr: false });
+
+// Integer ratios: decimal <ratio> values are not parsed by older Safari.
+const LANDSCAPE = "(min-aspect-ratio: 21/20)";
+const TABLET_PORTRAIT = "(min-width: 640px) and (max-aspect-ratio: 1049/1000)";
+
+// The 1448×1086 (4:3) photos are cover-fitted at 1.05× scale. In viewports
+// narrower than 4:3 they are height-bound, so the rendered width is
+// 1.05 × (4/3) × viewport height ≈ 140vh — far wider than 100vw on phones.
+const HERO_SIZES = "(min-aspect-ratio: 4/3) 105vw, 140vh";
+
+const RIPPLE_PLATES: RipplePlateSource[] = [
+  { media: LANDSCAPE, src: "/assets/hero-text.svg" },
+  { media: TABLET_PORTRAIT, src: "/assets/hero-text-tablet.svg" },
+  { src: "/assets/hero-text-mobile.svg" },
+];
 
 export default function Hero3D() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
   const bgRef = useRef<HTMLImageElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const subjectRef = useRef<HTMLImageElement>(null);
-  const [layoutMode, setLayoutMode] = useState<"desktop" | "tablet" | "mobile">(() => {
-    if (typeof window === "undefined") return "desktop";
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    if (w / h >= 1.05) return "desktop";
-    if (w >= 640) return "tablet";
-    return "mobile";
-  });
+  const caps = useRenderCaps();
+
+  // WebGL hero: mounted after the page is idle, then revealed over the static
+  // plate only once its first frame is on screen (no blank flash).
+  const [mountWebgl, setMountWebgl] = useState(false);
+  const [webglReady, setWebglReady] = useState(false);
+  const [webglFailed, setWebglFailed] = useState(false);
 
   useEffect(() => {
-    const checkLayout = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const isPortrait = w / h < 1.05;
+    if (!caps.webglHero || webglFailed) return;
+    return onIdle(() => setMountWebgl(true), 2500);
+  }, [caps.webglHero, webglFailed]);
 
-      if (!isPortrait) {
-        // Landscape orientation (Desktop, Laptop, Tablet landscape, Mobile landscape)
-        setLayoutMode("desktop");
-      } else if (w >= 640) {
-        // Portrait tablets (iPad 768x1024, iPad Pro 834x1194, 1024x1366)
-        setLayoutMode("tablet");
-      } else {
-        // Portrait mobile phones (320px to 430px)
-        setLayoutMode("mobile");
-      }
-    };
-    checkLayout();
-    window.addEventListener("resize", checkLayout, { passive: true });
-    return () => window.removeEventListener("resize", checkLayout);
+  const handleReady = useCallback(() => setWebglReady(true), []);
+  const handleFailure = useCallback(() => {
+    setWebglFailed(true);
+    setWebglReady(false);
+    setMountWebgl(false);
   }, []);
 
+  // Pointer parallax: fine pointers only, rAF-batched, sleeps when settled or
+  // off-screen. Touch devices never attach these listeners.
+  const parallax = caps.finePointer && !caps.reducedMotion && caps.tier !== "low";
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !parallax) return;
+    container.dataset.parallax = "on";
+    const layers = [bgRef.current, subjectRef.current, textRef.current];
 
     let mouseX = 0;
     let mouseY = 0;
     let currentX = 0;
     let currentY = 0;
-    const lerpFactor = 0.08;
-    let animationFrameId: number | null = null;
-    let isAnimating = false;
+    let raf = 0;
     let isVisible = true;
-    let cachedRect: DOMRect | null = null;
-
-    const updateCachedRect = () => {
-      if (container) {
-        cachedRect = container.getBoundingClientRect();
-      }
-    };
-
-    const startAnimation = () => {
-      if (!isAnimating && isVisible) {
-        isAnimating = true;
-        animationFrameId = requestAnimationFrame(render);
-      }
-    };
-
-    const isTouchDevice =
-      typeof window !== "undefined" &&
-      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-    const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const onMouseEnter = () => {
-      if (isTouchDevice || prefersReduced) return;
-      updateCachedRect();
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isVisible || isTouchDevice || prefersReduced) return;
-      if (!cachedRect) updateCachedRect();
-      if (!cachedRect || cachedRect.width === 0 || cachedRect.height === 0) return;
-      
-      mouseX = (e.clientX - cachedRect.left) / cachedRect.width - 0.5;
-      mouseY = (e.clientY - cachedRect.top) / cachedRect.height - 0.5;
-      startAnimation();
-    };
-
-    const onMouseLeave = () => {
-      if (isTouchDevice) return;
-      mouseX = 0;
-      mouseY = 0;
-      startAnimation();
-    };
+    let rect: DOMRect | null = null;
 
     const render = () => {
-      if (!isVisible) {
-        isAnimating = false;
-        animationFrameId = null;
-        return;
-      }
-
-      currentX += (mouseX - currentX) * lerpFactor;
-      currentY += (mouseY - currentY) * lerpFactor;
-
-      const diffX = Math.abs(mouseX - currentX);
-      const diffY = Math.abs(mouseY - currentY);
-
-      // Parallax Shifts
-      const sceneShiftX = currentX * 14;
-      const sceneShiftY = currentY * 10;
-      const textShiftX = -currentX * 18;
-      const textShiftY = -currentY * 14;
-
-      if (bgRef.current) {
-        bgRef.current.style.transform = `scale(1.05) translate3d(${sceneShiftX.toFixed(
-          2
-        )}px, ${sceneShiftY.toFixed(2)}px, 0)`;
-      }
-      if (subjectRef.current) {
-        subjectRef.current.style.transform = `scale(1.05) translate3d(${sceneShiftX.toFixed(
-          2
-        )}px, ${sceneShiftY.toFixed(2)}px, 0)`;
-      }
+      raf = 0;
+      if (!isVisible) return;
+      currentX += (mouseX - currentX) * 0.08;
+      currentY += (mouseY - currentY) * 0.08;
+      const sx = (currentX * 14).toFixed(2);
+      const sy = (currentY * 10).toFixed(2);
+      const scene = `scale(1.05) translate3d(${sx}px, ${sy}px, 0)`;
+      if (bgRef.current) bgRef.current.style.transform = scene;
+      if (subjectRef.current) subjectRef.current.style.transform = scene;
       if (textRef.current) {
-        textRef.current.style.transform = `translate3d(${textShiftX.toFixed(
-          2
-        )}px, ${textShiftY.toFixed(2)}px, 0)`;
+        textRef.current.style.transform = `translate3d(${(-currentX * 18).toFixed(2)}px, ${(-currentY * 14).toFixed(2)}px, 0)`;
       }
-
-      // If settled and reached rest state, pause RAF until next user interaction
-      if (diffX < 0.0004 && diffY < 0.0004) {
+      if (Math.abs(mouseX - currentX) < 0.0004 && Math.abs(mouseY - currentY) < 0.0004) {
         currentX = mouseX;
         currentY = mouseY;
-        isAnimating = false;
-        animationFrameId = null;
         return;
       }
-
-      animationFrameId = requestAnimationFrame(render);
+      raf = requestAnimationFrame(render);
+    };
+    const start = () => {
+      if (!raf && isVisible) raf = requestAnimationFrame(render);
     };
 
-    // Viewport Intersection Observer: completely sleep when scrolled out of view
-    const observer = new IntersectionObserver(
+    const onEnter = () => {
+      rect = container.getBoundingClientRect();
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      if (!rect) rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      mouseX = (e.clientX - rect.left) / rect.width - 0.5;
+      mouseY = (e.clientY - rect.top) / rect.height - 0.5;
+      start();
+    };
+    const onLeave = () => {
+      mouseX = 0;
+      mouseY = 0;
+      rect = null;
+      start();
+    };
+    // Cached rect goes stale when the page scrolls; drop it so the next move re-reads once.
+    const onScroll = () => {
+      rect = null;
+    };
+
+    const io = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
-        isVisible = entry.isIntersecting;
-        if (isVisible) {
-          updateCachedRect();
-          startAnimation();
-        } else {
-          if (animationFrameId !== null) {
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-          }
-          isAnimating = false;
+        isVisible = entries[0].isIntersecting;
+        if (!isVisible && raf) {
+          cancelAnimationFrame(raf);
+          raf = 0;
         }
       },
-      { threshold: 0.05 }
+      { threshold: 0 }
     );
-    observer.observe(container);
+    io.observe(container);
 
-    container.addEventListener("mouseenter", onMouseEnter, { passive: true });
-    container.addEventListener("mousemove", onMouseMove, { passive: true });
-    container.addEventListener("mouseleave", onMouseLeave, { passive: true });
-    window.addEventListener("resize", updateCachedRect, { passive: true });
-
-    // Initial render setup
-    startAnimation();
+    container.addEventListener("pointerenter", onEnter, { passive: true });
+    container.addEventListener("pointermove", onMove, { passive: true });
+    container.addEventListener("pointerleave", onLeave, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
-      observer.disconnect();
-      container.removeEventListener("mouseenter", onMouseEnter);
-      container.removeEventListener("mousemove", onMouseMove);
-      container.removeEventListener("mouseleave", onMouseLeave);
-      window.removeEventListener("resize", updateCachedRect);
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
+      io.disconnect();
+      container.removeEventListener("pointerenter", onEnter);
+      container.removeEventListener("pointermove", onMove);
+      container.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+      delete container.dataset.parallax;
+      layers.forEach((el) => {
+        if (el) el.style.transform = "";
+      });
     };
-  }, []);
+  }, [parallax]);
 
   const handleScrollCue = () => {
-    const el = document.getElementById("explore-section");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
+    document.getElementById("explore-section")?.scrollIntoView({
+      behavior: caps.reducedMotion ? "auto" : "smooth",
+    });
   };
 
   return (
-    <section ref={containerRef} className="hero" id="hero">
+    <section
+      ref={containerRef}
+      className="hero"
+      id="hero"
+      data-anim-scope
+      data-webgl={webglReady ? "ready" : undefined}
+    >
+      <h1 className="sr-only">Pulkit Maheshwari — Social Media Manager, Creative Director &amp; Social Strategist</h1>
       <div className="hero-stage">
-        {/* Layer 1: Base Background Landscape Photo */}
-        <img
+        {/* Layer 1: Base background photo (LCP element) */}
+        <Image
           ref={bgRef}
           src="/assets/hero-bg.webp"
-          alt="Golden landscape field background"
+          alt=""
+          fill
+          priority
+          sizes={HERO_SIZES}
           className="hero-layer hero-layer-bg"
-          loading="eager"
         />
 
-        {/* Layer 2: Typography Layer with React Bits Ripple Distortion & Higher Borders */}
-        <div ref={textRef} className="hero-layer hero-layer-text pointer-events-auto">
-          {/* Sublayer 2A: React Bits Ripple Distortion (Strictly clipped inside text silhouette) */}
-          <div
-            className="absolute inset-0 w-full h-full pointer-events-auto hero-text-mask"
-            style={{
-              zIndex: 1,
-            }}
-          >
-            <RippleDistortion
-              key={layoutMode}
-              src={
-                layoutMode === "mobile"
-                  ? "/assets/hero-text-mobile.svg"
-                  : layoutMode === "tablet"
-                  ? "/assets/hero-text-tablet.svg"
-                  : "/assets/hero-text.svg"
-              }
-              brushSize={88}
-              strength={0.23}
-              swirl={0.42}
-              rings={3}
-              hoverRings={1.3}
-              spread={2.5}
-              fade={2.8}
-              speed={0.70}
-              spacing={5}
-              dispersion={0.035}
-              glint={0.92}
-              tint="#e51d24"
-              tintAmount={0.20}
-              grayscale={false}
-              highlightColor="#ffffff"
-              trigger="both"
-              clickStrength={2.4}
-              quality="high"
-            />
-          </div>
+        {/* Layer 2: Typography */}
+        <div ref={textRef} className="hero-layer hero-layer-text">
+          {/* 2A: Static liquid-ruby plate. Always in the HTML, so the hero is complete
+              before any JS runs; it doubles as the no-WebGL / low-tier experience. */}
+          <picture className="hero-text-plate hero-text-static">
+            <source media={LANDSCAPE} srcSet="/assets/hero-text-static.svg" />
+            <source media={TABLET_PORTRAIT} srcSet="/assets/hero-text-tablet-static.svg" />
+            <img src="/assets/hero-text-mobile-static.svg" alt="" decoding="async" fetchPriority="high" />
+          </picture>
 
-          {/* Sublayer 2B: The Higher Layer - Crisp static text borders sitting above the ripple */}
-          <picture className="hero-text-vector-plate pointer-events-none" style={{ zIndex: 2 }}>
-            <source media="(min-aspect-ratio: 1.05/1)" srcSet="/assets/hero-text-borders.svg" />
-            <source media="(min-width: 640px) and (max-aspect-ratio: 1.049/1)" srcSet="/assets/hero-text-borders-tablet.svg" />
-            <img
-              src="/assets/hero-text-borders-mobile.svg"
-              alt="SOCIAL MEDIA MANAGER Borders"
-              className="w-full h-full object-cover object-top pointer-events-none"
-            />
+          {/* 2B: Interactive ripple: hover + click on desktop, tap on touch */}
+          {mountWebgl && (
+            <div className="hero-text-webgl" aria-hidden="true">
+              <RippleDistortion
+                sources={RIPPLE_PLATES}
+                interactionTarget={containerRef}
+                dpr={caps.webglDpr}
+                quality={caps.tier === "high" && caps.finePointer ? "high" : "low"}
+                brushSize={88}
+                strength={0.23}
+                swirl={0.42}
+                rings={3}
+                hoverRings={1.3}
+                spread={2.5}
+                fade={2.8}
+                speed={0.7}
+                spacing={5}
+                dispersion={0.035}
+                glint={0.92}
+                tint="#e51d24"
+                tintAmount={0.2}
+                highlightColor="#ffffff"
+                trigger="both"
+                clickStrength={2.4}
+                onReady={handleReady}
+                onFailure={handleFailure}
+              />
+            </div>
+          )}
+
+          {/* 2C: Crisp vector borders above the fill */}
+          <picture className="hero-text-plate hero-text-borders">
+            <source media={LANDSCAPE} srcSet="/assets/hero-text-borders.svg" />
+            <source media={TABLET_PORTRAIT} srcSet="/assets/hero-text-borders-tablet.svg" />
+            <img src="/assets/hero-text-borders-mobile.svg" alt="" decoding="async" />
           </picture>
         </div>
 
-        {/* Layer 3: Foreground Subject Cutout (Identical photo coordinate lock) */}
-        <img
+        {/* Layer 3: Foreground subject cutout (same framing as the background) */}
+        <Image
           ref={subjectRef}
           src="/assets/hero-subject.webp"
-          alt="Pulkit Maheshwari Social Media Manager Cutout"
+          alt="Pulkit Maheshwari"
+          fill
+          priority
+          sizes={HERO_SIZES}
           className="hero-layer hero-layer-subject"
-          loading="eager"
         />
 
-        {/* Cinematic Film Color Grading Layers */}
+        {/* Cinematic grading + feathered blend into the page */}
         <div className="hero-color-grade" aria-hidden="true" />
         <div className="hero-film-tone" aria-hidden="true" />
-
-        {/* Seamless Feathered Blend into Next Page / Content */}
         <div className="hero-bottom-blend" aria-hidden="true" />
       </div>
 
-      {/* Lowkey Scroll Cue in the Bottom Right Corner */}
-      <button
-        onClick={handleScrollCue}
-        className="scroll-cue"
-        aria-label="Scroll to explore"
-        type="button"
-      >
+      <button onClick={handleScrollCue} className="scroll-cue" aria-label="Scroll to explore" type="button">
         <span className="scroll-mouse" aria-hidden="true">
           <span className="scroll-wheel" />
         </span>

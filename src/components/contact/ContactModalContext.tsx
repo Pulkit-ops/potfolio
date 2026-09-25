@@ -1,7 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import ContactModal from "./ContactModal";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
+import { onIdle } from "@/lib/renderTier";
+
+const loadModal = () => import("./ContactModal");
+// Not part of the initial bundle; prefetched when the browser goes idle so the
+// first click still opens instantly.
+const ContactModal = dynamic(loadModal, { ssr: false });
 
 interface ContactModalContextType {
   isContactModalOpen: boolean;
@@ -18,65 +24,57 @@ const ContactModalContext = createContext<ContactModalContextType>({
 export function ContactModalProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const openContactModal = useCallback(() => {
-    setIsOpen(true);
-  }, []);
+  const openContactModal = useCallback(() => setIsOpen(true), []);
+  const closeContactModal = useCallback(() => setIsOpen(false), []);
 
-  const closeContactModal = useCallback(() => {
-    setIsOpen(false);
-  }, []);
+  useEffect(() => onIdle(() => void loadModal(), 4000), []);
 
-  // Lock body scroll and listen for Escape key
+  // Scroll lock + Escape. Locking the root element (not only <body>) is what
+  // iOS Safari 16+ honours; the scrollbar gutter is compensated to avoid a
+  // horizontal jump on desktop. No position:fixed trick, so the page never
+  // jumps back to the top on close.
   useEffect(() => {
-    if (isOpen) {
-      // Prevent layout shift from scrollbar disappearing
-      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-      document.body.style.overflow = "hidden";
-      if (scrollbarWidth > 0) {
-        document.body.style.paddingRight = `${scrollbarWidth}px`;
-      }
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
-          closeContactModal();
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => {
-        document.body.style.overflow = "";
-        document.body.style.paddingRight = "";
-        window.removeEventListener("keydown", handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = "";
-      document.body.style.paddingRight = "";
-    }
+    if (!isOpen) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
+    const prev = { html: html.style.overflow, body: body.style.overflow, pad: body.style.paddingRight };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeContactModal();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      html.style.overflow = prev.html;
+      body.style.overflow = prev.body;
+      body.style.paddingRight = prev.pad;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, closeContactModal]);
 
-  // Support global custom event for non-react triggers
+  // Global custom event for non-React triggers
   useEffect(() => {
     const handleGlobalTrigger = () => openContactModal();
     window.addEventListener("open-contact-modal", handleGlobalTrigger);
     return () => window.removeEventListener("open-contact-modal", handleGlobalTrigger);
   }, [openContactModal]);
 
+  const value = useMemo(
+    () => ({ isContactModalOpen: isOpen, openContactModal, closeContactModal }),
+    [isOpen, openContactModal, closeContactModal]
+  );
+
   return (
-    <ContactModalContext.Provider
-      value={{
-        isContactModalOpen: isOpen,
-        openContactModal,
-        closeContactModal,
-      }}
-    >
+    <ContactModalContext.Provider value={value}>
       {children}
-      <ContactModal isOpen={isOpen} onClose={closeContactModal} />
+      {isOpen && <ContactModal onClose={closeContactModal} />}
     </ContactModalContext.Provider>
   );
 }
 
 export function useContactModal() {
-  const context = useContext(ContactModalContext);
-  if (!context) {
-    throw new Error("useContactModal must be used within a ContactModalProvider");
-  }
-  return context;
+  return useContext(ContactModalContext);
 }

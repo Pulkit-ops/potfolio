@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { ServiceDetailedItem } from "@/data/servicesData";
 import { useContactModal } from "@/components/contact/ContactModalContext";
+import Image from "next/image";
 import styles from "./ServicesMobileMethods.module.css";
 
 interface ServicesMobileMethodsProps {
@@ -148,46 +149,47 @@ export default function ServicesMobileMethods({
   );
 
   // ── SCROLL-DRIVEN STICKY DWELL ENGINE ─────────────────────────────────────
-  // Locks the card in view ("sticks for a second while scrolling"),
-  // advancing stages if deep scroll is present, without calling parent setState in render.
+  // Advances stages while the docked card is pinned. The scroll listener is
+  // attached only while the track is on screen (it used to run for the whole
+  // page on every device), and state updates only when the stage changes.
   useEffect(() => {
-    let animId = 0;
+    const track = trackRef.current;
+    if (!track) return;
+    let raf = 0;
 
+    const update = () => {
+      raf = 0;
+      if (isProgrammaticScroll.current) return;
+      const rect = track.getBoundingClientRect();
+      const totalDistance = rect.height - window.innerHeight;
+      if (totalDistance <= 40) return;
+      const scrolled = -rect.top;
+      if (scrolled < 0 || scrolled > totalDistance) return;
+      const computedIdx = Math.min(services.length - 1, Math.floor((scrolled / totalDistance) * services.length));
+      if (activeIndexRef.current !== computedIdx) {
+        activeIndexRef.current = computedIdx;
+        setMobileStageIndex(computedIdx);
+        onSelect?.(services[computedIdx].id);
+      }
+    };
     const onScroll = () => {
-      if (isProgrammaticScroll.current || !trackRef.current) return;
-      if (animId) return;
-
-      animId = requestAnimationFrame(() => {
-        animId = 0;
-        if (!trackRef.current) return;
-
-        const rect = trackRef.current.getBoundingClientRect();
-        const totalDistance = rect.height - window.innerHeight;
-        if (totalDistance <= 40) return;
-
-        const scrolled = -rect.top;
-        if (scrolled < 0 || scrolled > totalDistance) return;
-
-        const progress = Math.max(0, Math.min(1, scrolled / totalDistance));
-        const computedIdx = Math.min(
-          services.length - 1,
-          Math.floor(progress * services.length)
-        );
-
-        if (activeIndexRef.current !== computedIdx) {
-          activeIndexRef.current = computedIdx;
-          setMobileStageIndex(computedIdx);
-          if (services[computedIdx] && onSelect) {
-            onSelect(services[computedIdx].id);
-          }
-        }
-      });
+      if (!raf) raf = requestAnimationFrame(update);
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    let attached = false;
+    const io = new IntersectionObserver((entries) => {
+      const on = entries[0].isIntersecting;
+      if (on === attached) return;
+      attached = on;
+      if (on) window.addEventListener("scroll", onScroll, { passive: true });
+      else window.removeEventListener("scroll", onScroll);
+    });
+    io.observe(track);
+
     return () => {
+      io.disconnect();
       window.removeEventListener("scroll", onScroll);
-      if (animId) cancelAnimationFrame(animId);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [services, onSelect]);
 
@@ -311,20 +313,25 @@ export default function ServicesMobileMethods({
             <span className={styles.schematicCornerBL} />
             <span className={styles.schematicCornerBR} />
 
-            {/* Ambient blurred backdrop to give edge-to-edge color tone */}
-            <img
+            {/* Ambient backdrop: a 32px rendition upscaled by the browser gives
+                the same soft colour wash as blur(28px), without a filter pass. */}
+            <Image
               src={currentService.image}
               alt=""
-              aria-hidden="true"
+              fill
+              sizes="32px"
               className={styles.schematicBackdrop}
             />
+            <span className={styles.schematicBackdropShade} />
 
-            {/* Uncropped foreground hero image */}
-            <img
+            {/* Uncropped foreground image (intrinsic aspect, height-bound) */}
+            <Image
               src={currentService.image}
               alt={currentService.imageAlt}
+              width={0}
+              height={0}
+              sizes="(min-width: 640px) 600px, calc(100vw - 4rem)"
               className={styles.schematicImage}
-              loading="eager"
             />
           </div>
 

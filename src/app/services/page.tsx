@@ -15,7 +15,7 @@ export default function ServicesPage() {
     <div className="w-full min-h-screen bg-[#08090b] text-[#f5f6f8] pt-16 sm:pt-24 lg:pt-28 pb-24 sm:pb-32">
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16">
         {/* Minimalist Top Back Bar */}
-        <div className="flex items-center justify-between pb-8 mb-12 border-b border-white/10">
+        <div data-anim-scope className="flex items-center justify-between pb-8 mb-12 border-b border-white/10">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-xs font-mono font-medium text-neutral-400 hover:text-white active:scale-95 transition-all group py-1 focus-visible:outline-none focus-visible:underline"
@@ -62,7 +62,7 @@ export default function ServicesPage() {
         >
           {/* Subtle Ambient Red Glow */}
           <div
-            className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-[#e51d24]/10 blur-3xl"
+            className="pointer-events-none absolute -top-72 left-1/2 -translate-x-1/2 w-[44rem] h-[44rem] rounded-full bloom-red"
             aria-hidden="true"
           />
 
