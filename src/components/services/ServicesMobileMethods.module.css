@@ -20,11 +20,47 @@
   gap: 0.75rem;
 }
 
-/* Calibrated dwell runway: allows the card to stay docked for a brief moment (~1 second of scroll) */
+/* Scroll runway: height is set by the engine (N × step while pinned, else 0). */
 .dwellRunway {
-  height: clamp(4rem, 12vh, 6.5rem);
+  height: 0;
   width: 100%;
   pointer-events: none;
+}
+
+/* Measures 100svh once (stable across mobile toolbar show/hide). */
+.svhProbe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100vh;
+  height: 100svh;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Only pin when the engine confirmed the stage fits on screen. */
+.mobileTrack[data-pinned="off"] .stickyStageWrapper {
+  position: relative;
+  top: auto;
+}
+
+/* All cards occupy one grid cell so the deck is always the tallest card's height. */
+.stageDeck {
+  display: grid;
+}
+.stageDeck > .mobileStageCard {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  opacity: 0;
+  transform: translate3d(0, 8px, 0);
+  transition: opacity 260ms ease, transform 320ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 320ms;
+}
+.stageDeck > .mobileStageCard[data-active] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition: opacity 260ms ease, transform 320ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
 }
 
 /* ── TREE CONDUIT RAIL ─────────────────────────────────────────────────── */
@@ -161,19 +197,9 @@
     inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
     0 20px 48px -10px rgba(0, 0, 0, 0.85);
   touch-action: pan-y;
-  animation: stageCardMorph 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-@keyframes stageCardMorph {
-  from {
-    opacity: 0.4;
-    transform: translateY(8px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
+
 
 /* Corner registration bracket */
 .cornerTL {
@@ -276,7 +302,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: clamp(235px, 64vw, 305px);
+  height: var(--bay-h, clamp(235px, 64vw, 305px));
   background: #06080d;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
@@ -487,11 +513,54 @@
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  .mobileStageCard {
-    animation: none;
+  .stageDeck > .mobileStageCard {
+    transition: none;
   }
   .treeLineFill,
   .treeNodeDot {
     transition: none;
   }
+}
+
+/* ── COMPACT PINNED LAYOUT (shorter phone screens) ─────────────────────────
+   The engine picks the roomiest density at which the whole card fits on
+   screen while pinned (typical iPhone Safari visible height is ~660–750px).
+   "compact" tightens rhythm only; "tight" (small phones) also drops the
+   one-line pull-quote. Touch targets stay ≥ 40px. */
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .stickyStageWrapper {
+  gap: 0.45rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .mobileStageCard {
+  gap: 0.55rem;
+  padding: 0.95rem 1rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .cardHeaderRow {
+  padding-bottom: 0.45rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .cardCopy {
+  line-height: 1.45;
+  margin-top: 0.2rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .personalityQuote {
+  padding-block: 0.15rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .deliverableTag {
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .deliverableList {
+  gap: 0.3rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .deliverableItem {
+  padding: 0.25rem 0.45rem;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .cardActionsRow {
+  padding-top: 0;
+}
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .detailBtn,
+.mobileTrack:is([data-density="compact"], [data-density="tight"]) .navStepBtn {
+  min-height: 40px;
+}
+.mobileTrack[data-density="tight"] .personalityQuote {
+  display: none;
 }
